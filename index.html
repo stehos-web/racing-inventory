@@ -1511,7 +1511,10 @@ async function supaFetch(table, method, body, params) {
 
 async function dbSelect(table, params) { return supaFetch(table, 'GET', null, params); }
 async function dbInsert(table, row) { return supaFetch(table, 'POST', row); }
-async function dbUpdate(table, id, patch) { return supaFetch(table, 'PATCH', patch, 'id=eq.' + id); }
+async function dbUpdate(table, id, patch) {
+  if (!id) { console.error('dbUpdate called with no id for table:', table); return null; }
+  return supaFetch(table, 'PATCH', patch, 'id=eq.' + id);
+}
 async function dbDelete(table, id) { return supaFetch(table, 'DELETE', null, 'id=eq.' + id); }
 
 async function dbUpsert(table, rows) {
@@ -1573,7 +1576,7 @@ function dbRowToNslWs(r) {
     r.ws_used_good||0, r.ws_used_repair||0);
 }
 function nslKitToDb(p) {
-  return { id: p.id||undefined, name:p.name, bin_number:p.sku||'', category:p.cat,
+  return { name:p.name, bin_number:p.sku||'', category:p.cat,
     req_qty:p.reqQty, qty_green:p.qtys[0], qty_red:p.qtys[1],
     qty_yellow:p.qtys[2], qty_orange:p.qtys[3],
     sr_qty_new:p.srQty, sr_qty_used_good:p.srUsedGood||0,
@@ -1583,7 +1586,7 @@ function nslKitToDb(p) {
     last_order_price:p.lastOrderPrice||0 };
 }
 function nslWsToDb(p) {
-  return { id:p.id||undefined, name:p.name, bin_number:p.sku||'', category:p.cat,
+  return { name:p.name, bin_number:p.sku||'', category:p.cat,
     req_qty:p.reqQty, qty_classroom:p.qtys[0], qty_portable:p.qtys[1],
     sr_qty_new:p.srQty, sr_qty_used_good:p.srUsedGood||0,
     sr_qty_used_repair:p.srUsedRepair||0, sr_min:p.srMin,
@@ -1594,22 +1597,18 @@ function nslWsToDb(p) {
 }
 
 async function persistNslKitPart(part) {
+  if (!part.id) { console.warn('NSL kit part missing id, skipping persist:', part.name); return; }
   var row = nslKitToDb(part);
-  if (!part.id) {
-    var res = await dbInsert('nsl_kit_parts', row);
-    if (res && res[0]) part.id = res[0].id;
-  } else {
-    await dbUpdate('nsl_kit_parts', part.id, row);
-  }
+  var res = await dbUpdate('nsl_kit_parts', part.id, row);
+  if (res) console.log('✓ Saved NSL kit:', part.name, 'id:', part.id);
+  else console.error('✗ Failed to save NSL kit:', part.name, 'id:', part.id);
 }
 async function persistNslWsPart(part) {
+  if (!part.id) { console.warn('NSL ws part missing id:', part.name); return; }
   var row = nslWsToDb(part);
-  if (!part.id) {
-    var res = await dbInsert('nsl_ws_parts', row);
-    if (res && res[0]) part.id = res[0].id;
-  } else {
-    await dbUpdate('nsl_ws_parts', part.id, row);
-  }
+  var res = await dbUpdate('nsl_ws_parts', part.id, row);
+  if (res) console.log('✓ Saved NSL ws:', part.name, 'id:', part.id);
+  else console.error('✗ Failed NSL ws:', part.name, 'id:', part.id);
 }
 async function deleteNslKitPart(id) { await dbDelete('nsl_kit_parts', id); }
 async function deleteNslWsPart(id) { await dbDelete('nsl_ws_parts', id); }
@@ -1655,7 +1654,7 @@ function dbRowToEcarWs(r) {
     r.ws_used_good||0, r.ws_used_repair||0);
 }
 function ecarHmsToDb(p) {
-  return { id:p.id||undefined, name:p.name, bin_number:p.sku||'', category:p.cat, req_qty:p.reqQty,
+  return { name:p.name, bin_number:p.sku||'', category:p.cat, req_qty:p.reqQty,
     qty_222:p.qtys[0], qty_226:p.qtys[1], qty_227:p.qtys[2],
     qty_223:p.qtys[3], qty_224:p.qtys[4], qty_225:p.qtys[5],
     sr_qty_new:p.srQty, sr_qty_used_good:p.srUsedGood||0,
@@ -1665,7 +1664,7 @@ function ecarHmsToDb(p) {
     unit_cost:p.unitCost||0, last_order_date:p.lastOrderDate||null, last_order_price:p.lastOrderPrice||0 };
 }
 function ecarGobToDb(p) {
-  return { id:p.id||undefined, name:p.name, bin_number:p.sku||'', category:p.cat, req_qty:p.reqQty,
+  return { name:p.name, bin_number:p.sku||'', category:p.cat, req_qty:p.reqQty,
     qty_222g:p.qtys[0], qty_223g:p.qtys[1],
     sr_qty_new:p.srQty, sr_qty_used_good:p.srUsedGood||0,
     sr_qty_used_repair:p.srUsedRepair||0, sr_min:p.srMin,
@@ -1674,7 +1673,7 @@ function ecarGobToDb(p) {
     unit_cost:p.unitCost||0, last_order_date:p.lastOrderDate||null, last_order_price:p.lastOrderPrice||0 };
 }
 function ecarWsToDb(p) {
-  return { id:p.id||undefined, name:p.name, bin_number:p.sku||'', category:p.cat, req_qty:p.reqQty,
+  return { name:p.name, bin_number:p.sku||'', category:p.cat, req_qty:p.reqQty,
     qty_workstation:p.qtys[0], qty_toolbox1:p.qtys[1], qty_toolbox2:p.qtys[2],
     qty_toolbox3:p.qtys[3], qty_toolbox4:p.qtys[4],
     sr_qty_new:p.srQty, sr_qty_used_good:p.srUsedGood||0,
@@ -1686,19 +1685,25 @@ function ecarWsToDb(p) {
 }
 
 async function persistEcarHmsPart(part) {
+  if (!part.id) { console.warn('E-Car HMS part missing id:', part.name); return; }
   var row = ecarHmsToDb(part);
-  if (!part.id) { var res = await dbInsert('ecar_hms_parts', row); if (res&&res[0]) part.id=res[0].id; }
-  else { await dbUpdate('ecar_hms_parts', part.id, row); }
+  var res = await dbUpdate('ecar_hms_parts', part.id, row);
+  if (res) console.log('✓ Saved HMS:', part.name, 'id:', part.id);
+  else console.error('✗ Failed HMS:', part.name, 'id:', part.id);
 }
 async function persistEcarGobPart(part) {
+  if (!part.id) { console.warn('E-Car Gob part missing id:', part.name); return; }
   var row = ecarGobToDb(part);
-  if (!part.id) { var res = await dbInsert('ecar_gob_parts', row); if (res&&res[0]) part.id=res[0].id; }
-  else { await dbUpdate('ecar_gob_parts', part.id, row); }
+  var res = await dbUpdate('ecar_gob_parts', part.id, row);
+  if (res) console.log('✓ Saved Gob:', part.name, 'id:', part.id);
+  else console.error('✗ Failed Gob:', part.name, 'id:', part.id);
 }
 async function persistEcarWsPart(part) {
+  if (!part.id) { console.warn('E-Car ws part missing id:', part.name); return; }
   var row = ecarWsToDb(part);
-  if (!part.id) { var res = await dbInsert('ecar_ws_parts', row); if (res&&res[0]) part.id=res[0].id; }
-  else { await dbUpdate('ecar_ws_parts', part.id, row); }
+  var res = await dbUpdate('ecar_ws_parts', part.id, row);
+  if (res) console.log('✓ Saved E-Car ws:', part.name, 'id:', part.id);
+  else console.error('✗ Failed E-Car ws:', part.name, 'id:', part.id);
 }
 async function deleteEcarHmsPart(id) { await dbDelete('ecar_hms_parts', id); }
 async function deleteEcarGobPart(id) { await dbDelete('ecar_gob_parts', id); }
