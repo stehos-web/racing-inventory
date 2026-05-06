@@ -378,7 +378,12 @@ tr:hover td{background:#fafaf8;}
 .tp-prog-btn:hover{border-color:var(--color-border-primary);color:var(--color-text-primary);}
 .tp-prog-btn.active-nsl{border-color:#185FA5;background:#EEF4FC;color:#185FA5;}
 .tp-prog-btn.active-ecar{border-color:#BA7517;background:#FDF8EE;color:#BA7517;}
+
+/* Reservation timer bar */
+.res-timer-bar{height:4px;background:#f0f0ee;border-radius:2px;overflow:hidden;margin-top:6px;}
+.res-timer-fill{height:100%;border-radius:2px;transition:width 1s linear;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -1266,12 +1271,26 @@ tr:hover td{background:#fafaf8;}
       </div>
     </div>
 
-    <!-- Section tabs -->
+    <!-- QR Code section -->
+    <div id="tp-qr-section" style="background:#fff;border:1px solid #e5e5e3;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+      <div id="tp-qr-code" style="flex-shrink:0;"></div>
+      <div style="flex:1;min-width:160px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Competitor QR Code</div>
+        <div style="font-size:11px;color:#666;margin-bottom:8px;" id="tp-qr-label">Competitors scan this to see your available items and send trade requests.</div>
+        <a id="tp-qr-link" href="#" target="_blank" style="font-size:11px;color:#185FA5;word-break:break-all;"></a>
+      </div>
+    </div>
+
+  <!-- Section tabs -->
     <div class="tabs" style="margin-bottom:1rem;">
       <div class="tab active" id="tp-tab-offers" onclick="setTpTab('offers')">Available to trade</div>
       <div class="tab" id="tp-tab-want" onclick="setTpTab('want')">Looking for</div>
       <div class="tab" id="tp-tab-incoming" onclick="setTpTab('incoming')">Incoming offers</div>
       <div class="tab" id="tp-tab-log" onclick="setTpTab('log')">Trade log</div>
+      <div class="tab" id="tp-tab-reservations" onclick="setTpTab('reservations')">
+        Reservations
+        <span id="tp-reservations-badge" style="display:none;" class="badge bd">0</span>
+      </div>
       <div class="tab" id="tp-tab-pending" onclick="setTpTab('pending')">
         Pending intake
         <span id="tp-pending-badge" style="display:none;" class="badge bd">0</span>
@@ -1303,6 +1322,15 @@ tr:hover td{background:#fafaf8;}
     <!-- Trade log -->
     <div id="tp-panel-log" style="display:none;">
       <div id="tp-log-body"><div class="tp-empty">No completed trades yet.</div></div>
+    </div>
+
+    <!-- Reservations -->
+    <div id="tp-panel-reservations" style="display:none;">
+      <div class="hint-bar" style="margin-bottom:.75rem;">
+        <span><strong>Reservations.</strong> Competitors who scanned the QR code and requested a trade. Reservations expire after 15 minutes.</span>
+        <button class="btn btn-sm" onclick="refreshReservations()">↻ Refresh</button>
+      </div>
+      <div id="tp-reservations-body"><div class="tp-empty">No active reservations.</div></div>
     </div>
 
     <!-- Pending intake -->
@@ -1841,6 +1869,19 @@ function hideLoadingOverlay() {
   var el = document.getElementById('db-loading');
   if (el) el.remove();
 }
+
+
+/* ── SUPABASE KEEPALIVE ─────────────────────────────────────── */
+async function keepAlive() {
+  try {
+    await supaFetch('app_config', 'GET', null, 'key=eq.suppliers&select=key');
+    console.log('Supabase ping OK — ' + new Date().toLocaleTimeString());
+  } catch(e) {
+    console.warn('Keepalive ping failed:', e);
+  }
+}
+// Ping every 10 minutes
+setInterval(keepAlive, 10 * 60 * 1000);
 
 /* ── Master startup load ────────────────────────────────────── */
 async function loadAllData() {
@@ -4453,6 +4494,8 @@ function activateTradingPost(eventName){
   refreshShortfalls();
   renderTpPanel();
   updatePendingBadge();
+  generateQrCode();
+  startReservationPolling();
 }
 
 /* ── Module navigation ──────────────────────────────────────── */
@@ -4483,7 +4526,7 @@ function showTradingPost(){
 /* ── Tabs ───────────────────────────────────────────────────── */
 function setTpTab(tab){
   tpActiveTab=tab;
-  ['offers','want','incoming','log','pending'].forEach(t=>{
+  ['offers','want','incoming','log','reservations','pending'].forEach(t=>{
     document.getElementById('tp-tab-'+t).classList.toggle('active',t===tab);
     document.getElementById('tp-panel-'+t).style.display=t===tab?'block':'none';
   });
@@ -4495,6 +4538,7 @@ function renderTpPanel(){
   else if(tpActiveTab==='want') renderWantList();
   else if(tpActiveTab==='incoming') renderIncoming();
   else if(tpActiveTab==='log') renderTradeLog();
+  else if(tpActiveTab==='reservations') renderReservations();
   else if(tpActiveTab==='pending') renderPending();
 }
 
@@ -4976,6 +5020,210 @@ function discardItem(id){
   p.status='discarded';p.assessedCond='discard';
   tpUpdatePendingStatus(p);
   updatePendingBadge();renderPending();tp_toast('Item discarded');
+}
+
+/* ── RESERVATIONS ─────────────────────────────────────────── */
+let tpReservations = [];
+let reservationPollTimer = null;
+
+function generateQrCode(){
+  const qrEl = document.getElementById('tp-qr-code');
+  const linkEl = document.getElementById('tp-qr-link');
+  const labelEl = document.getElementById('tp-qr-label');
+  if(!qrEl) return;
+
+  const baseUrl = window.location.origin + '/trade.html';
+  const params = '?prog=' + (tpProgram||'nsl') +
+    '&event=' + encodeURIComponent(tpEvent||'');
+  const fullUrl = baseUrl + params;
+
+  // Clear previous QR code
+  qrEl.innerHTML = '';
+
+  if(typeof QRCode !== 'undefined'){
+    new QRCode(qrEl, {
+      text: fullUrl,
+      width: 100,
+      height: 100,
+      colorDark: '#1a1a1a',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } else {
+    qrEl.innerHTML = '<div style="width:100px;height:100px;background:#f0f0ee;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#888;text-align:center;">QR<br/>code</div>';
+  }
+
+  if(linkEl){ linkEl.href = fullUrl; linkEl.textContent = fullUrl; }
+  if(labelEl){ labelEl.textContent = (tpProgram==='nsl'?'NSL':'E-Car') + ' · ' + tpEvent + ' — competitors scan to trade'; }
+}
+
+async function loadReservations(){
+  if(!tpEvent) return;
+  try {
+    // Get event id first
+    const events = await dbSelect('tp_events',
+      'name=eq.' + encodeURIComponent(tpEvent) + '&program=eq.' + tpProgram);
+    if(!events || !events.length) return;
+    const evId = events[0].id;
+
+    const rows = await dbSelect('tp_reservations',
+      'event_id=eq.' + evId + '&status=eq.pending&order=created_at');
+    if(!rows) return;
+
+    // Filter out expired ones
+    const now = new Date();
+    const active = rows.filter(r => new Date(r.expires_at) > now);
+
+    // Check for new ones
+    const prevCount = tpReservations.length;
+    tpReservations = active;
+    const newCount = tpReservations.length;
+
+    updateReservationsBadge();
+
+    // Alert coordinator if new ones came in
+    if(newCount > prevCount && prevCount >= 0){
+      const newest = tpReservations[tpReservations.length-1];
+      tp_toast('🔔 New reservation: ' + newest.competitor_name + ' — ' + newest.wanted_item_name, 5000);
+    }
+
+    if(tpActiveTab === 'reservations') renderReservations();
+  } catch(e){ console.error('Reservation load error:', e); }
+}
+
+function startReservationPolling(){
+  if(reservationPollTimer) clearInterval(reservationPollTimer);
+  loadReservations();
+  reservationPollTimer = setInterval(loadReservations, 30000);
+}
+
+function refreshReservations(){
+  loadReservations();
+  tp_toast('Reservations refreshed');
+}
+
+function updateReservationsBadge(){
+  const active = tpReservations.filter(r => r.status === 'pending');
+  const badge = document.getElementById('tp-reservations-badge');
+  if(badge){
+    badge.textContent = active.length;
+    badge.style.display = active.length > 0 ? 'inline-flex' : 'none';
+  }
+}
+
+function timeLeft(expiresAt){
+  const diff = new Date(expiresAt) - new Date();
+  if(diff <= 0) return 'Expired';
+  const mins = Math.floor(diff / 60000);
+  const secs = Math.floor((diff % 60000) / 1000);
+  return mins + 'm ' + secs + 's';
+}
+
+function renderReservations(){
+  const body = document.getElementById('tp-reservations-body');
+  if(!body) return;
+
+  const now = new Date();
+  const active = tpReservations.filter(r => new Date(r.expires_at) > now);
+
+  if(!active.length){
+    body.innerHTML = '<div class="tp-empty">No active reservations. Competitors who scan your QR code and submit a request will appear here.</div>';
+    return;
+  }
+
+  body.innerHTML = active.map(r => {
+    const left = timeLeft(r.expires_at);
+    const pct = Math.max(0, Math.min(100,
+      (new Date(r.expires_at) - now) / (15 * 60 * 1000) * 100));
+    const urgent = pct < 30;
+    return `
+      <div class="tp-card" style="border-left:3px solid ${urgent?'#dc3545':'#185FA5'};background:${urgent?'#FDF2F2':'#fff'};">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:0;">
+            <div class="tp-card-title">${tp_esc(r.competitor_name)} · ${tp_esc(r.team_name||'—')}</div>
+            <div class="tp-card-meta">
+              ${r.phone ? `<span>📞 ${tp_esc(r.phone)}</span>` : ''}
+              <span>Wants: <strong>${tp_esc(r.wanted_item_name)}</strong> × ${r.wanted_qty||1}</span>
+              ${r.their_offer_name ? `<span>Offering: <strong>${tp_esc(r.their_offer_name)}</strong></span>` : ''}
+            </div>
+            ${r.notes ? `<div style="font-size:11px;color:#666;margin-top:4px;">${tp_esc(r.notes)}</div>` : ''}
+            <!-- Timer bar -->
+            <div style="margin-top:8px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
+                <span style="font-size:11px;color:${urgent?'#dc3545':'#185FA5'};font-weight:600;">⏱ ${left}</span>
+                <span style="font-size:10px;color:#aaa;">15 min hold</span>
+              </div>
+              <div style="height:4px;background:#f0f0ee;border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${urgent?'#dc3545':'#185FA5'};border-radius:2px;transition:width 1s;"></div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
+            <button class="btn btn-green btn-sm" onclick="confirmReservation(${r.id})">✓ Confirm trade</button>
+            <button class="btn btn-sm" style="color:#721c24;border-color:#F8D7DA;" onclick="declineReservation(${r.id})">✕ Decline</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Update timers every second
+  clearInterval(window._resTimerInterval);
+  window._resTimerInterval = setInterval(() => {
+    if(tpActiveTab === 'reservations') renderReservations();
+  }, 1000);
+}
+
+async function confirmReservation(id){
+  const r = tpReservations.find(x => x.id === id);
+  if(!r) return;
+  await dbUpdate('tp_reservations', id, {
+    status: 'confirmed',
+    resolved_at: new Date().toISOString()
+  });
+  tpReservations = tpReservations.filter(x => x.id !== id);
+
+  // Create a trade log entry and move to pending
+  const incomingRecord = {
+    competitorName: r.competitor_name,
+    team: r.team_name || '',
+    event: tpEvent,
+    date: new Date().toISOString(),
+    offering: {
+      name: r.their_offer_name || 'Item from trade',
+      sku: '',
+      qty: r.their_offer_qty || 1,
+      cond: r.their_offer_condition || 'unknown'
+    },
+    wanting: {
+      name: r.wanted_item_name,
+      sku: '',
+      qty: r.wanted_qty || 1
+    },
+    notes: r.notes || '',
+    status: 'accepted'
+  };
+  tpIncoming.push(incomingRecord);
+  const dbId = await tpSaveIncomingRecord(incomingRecord);
+  await completeTrade(incomingRecord, dbId);
+
+  updateReservationsBadge();
+  renderReservations();
+  updatePendingBadge();
+  tp_toast('Trade confirmed — ' + r.competitor_name + ' → pending intake');
+}
+
+async function declineReservation(id){
+  const r = tpReservations.find(x => x.id === id);
+  if(!r) return;
+  if(!confirm('Decline reservation from ' + r.competitor_name + '?')) return;
+  await dbUpdate('tp_reservations', id, {
+    status: 'declined',
+    resolved_at: new Date().toISOString()
+  });
+  tpReservations = tpReservations.filter(x => x.id !== id);
+  updateReservationsBadge();
+  renderReservations();
+  tp_toast('Reservation declined');
 }
 
 </script>

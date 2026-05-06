@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Racing Program — Trading Post</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px;min-height:100vh;}
+.app{max-width:600px;margin:0 auto;padding:1rem;}
+.header{background:#185FA5;color:#fff;border-radius:14px;padding:1.25rem 1.5rem;margin-bottom:1rem;text-align:center;}
+.header h1{font-size:20px;font-weight:700;margin-bottom:4px;}
+.header p{font-size:13px;opacity:0.85;}
+.header .event-tag{display:inline-block;background:rgba(255,255,255,0.2);border-radius:20px;padding:3px 12px;font-size:12px;margin-top:8px;}
+.section{background:#fff;border:1px solid #e5e5e3;border-radius:12px;padding:1.25rem;margin-bottom:1rem;}
+.section h2{font-size:15px;font-weight:600;margin-bottom:.875rem;display:flex;align-items:center;gap:8px;}
+.section h2 .icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.empty{text-align:center;padding:2rem;color:#aaa;font-size:13px;}
+/* Offer cards */
+.offer-card{border:1px solid #e5e5e3;border-radius:10px;padding:12px 14px;margin-bottom:8px;}
+.offer-card:last-child{margin-bottom:0;}
+.offer-name{font-weight:600;font-size:14px;margin-bottom:4px;}
+.offer-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:#666;margin-bottom:10px;}
+.badge{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500;}
+.badge-new{background:#D4EDDA;color:#155724;}
+.badge-good{background:#D1ECF1;color:#0C5460;}
+.badge-surplus{background:#E8E4FE;color:#3C3489;}
+.reserve-btn{width:100%;padding:9px;border-radius:8px;border:none;background:#185FA5;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;}
+.reserve-btn:hover{background:#0C447C;}
+.reserve-btn:disabled{background:#ccc;cursor:not-allowed;}
+.reserve-btn.reserved{background:#E8F5E9;color:#155724;border:1px solid #A5D6A7;cursor:default;}
+/* Want list */
+.want-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0ee;font-size:13px;}
+.want-item:last-child{border-bottom:none;}
+.want-dot{width:6px;height:6px;border-radius:50%;background:#185FA5;flex-shrink:0;}
+.want-qty{font-size:11px;background:#f0f0ee;padding:1px 7px;border-radius:4px;color:#666;margin-left:auto;white-space:nowrap;}
+/* Request form */
+.form-group{margin-bottom:12px;}
+.form-group label{font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:500;}
+.form-group input,.form-group select,.form-group textarea{width:100%;font-size:13px;padding:9px 12px;border-radius:8px;border:1px solid #ddd;font-family:inherit;background:#fff;color:#1a1a1a;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#185FA5;box-shadow:0 0 0 3px rgba(24,95,165,0.1);}
+.form-group textarea{resize:vertical;min-height:70px;}
+.submit-btn{width:100%;padding:12px;border-radius:10px;border:none;background:#0F9D58;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;}
+.submit-btn:hover{background:#0a7a43;}
+.submit-btn:disabled{background:#ccc;cursor:not-allowed;}
+.required{color:#dc3545;}
+/* Timer */
+.timer{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#856404;background:#FFF3CD;padding:3px 8px;border-radius:4px;margin-top:6px;}
+/* Loading */
+.loading{text-align:center;padding:3rem;color:#888;}
+.spinner{width:36px;height:36px;border:3px solid #e5e5e3;border-top-color:#185FA5;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 1rem;}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Success state */
+.success-box{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:10px;padding:1.25rem;text-align:center;margin-bottom:1rem;}
+.success-box .icon{font-size:36px;margin-bottom:.5rem;}
+.success-box h3{font-size:16px;font-weight:600;color:#155724;margin-bottom:.25rem;}
+.success-box p{font-size:13px;color:#2E7D32;}
+/* Error */
+.error-box{background:#FDF2F2;border:1px solid #F8D7DA;border-radius:10px;padding:1rem;text-align:center;margin-bottom:1rem;font-size:13px;color:#721c24;}
+/* Reservation confirmation modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:flex-end;justify-content:center;padding:1rem;}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:14px 14px 14px 14px;padding:1.5rem;width:100%;max-width:560px;}
+.modal h3{font-size:16px;font-weight:600;margin-bottom:.5rem;}
+.modal p{font-size:13px;color:#666;margin-bottom:1.25rem;line-height:1.5;}
+.modal-actions{display:flex;gap:8px;}
+.modal-actions button{flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;}
+.modal-actions .confirm{background:#185FA5;color:#fff;border-color:#185FA5;}
+/* Tabs */
+.tabs{display:flex;gap:2px;background:#f0f0ee;border-radius:10px;padding:3px;margin-bottom:1rem;}
+.tab-btn{flex:1;padding:8px;border-radius:8px;border:none;background:transparent;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;color:#888;transition:all 0.15s;}
+.tab-btn.active{background:#fff;color:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,0.1);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+/* Footer */
+.footer{text-align:center;padding:1.5rem 0;font-size:11px;color:#aaa;}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div>Loading trading post…</div>
+  </div>
+</div>
+
+<!-- Reservation confirm modal -->
+<div class="modal-overlay" id="res-modal">
+  <div class="modal">
+    <h3 id="res-modal-title">Reserve this item?</h3>
+    <p id="res-modal-body">You'll have 15 minutes to make the physical trade. The coordinator will be notified immediately.</p>
+    <div class="modal-actions">
+      <button onclick="closeResModal()">Cancel</button>
+      <button class="confirm" onclick="submitReservation()">Reserve — 15 min hold</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPA_URL = 'https://owctuymdpgzvxtyfuxkd.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93Y3R1eW1kcGd6dnh0eWZ1eGtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNzA5MjksImV4cCI6MjA5MjY0NjkyOX0.YZ_6rgVkI9QyeYwez_CVNFBqVY-JqKoV18gJ5_a91Ew';
+
+/* ── Supabase helpers ────────────────────────────────────────── */
+async function supaGet(table, params) {
+  const url = SUPA_URL + '/rest/v1/' + table + (params ? '?' + params : '');
+  const res = await fetch(url, {
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY
+    }
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+async function supaPost(table, body) {
+  const res = await fetch(SUPA_URL + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) { console.error('Post error:', await res.text()); return null; }
+  return res.json();
+}
+async function supaPatch(table, id, body) {
+  const res = await fetch(SUPA_URL + '/rest/v1/' + table + '?id=eq.' + id, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify(body)
+  });
+  return res.ok;
+}
+
+/* ── State ──────────────────────────────────────────────────── */
+let prog = null;
+let eventName = null;
+let eventId = null;
+let offers = [];
+let wantList = [];
+let reservations = [];
+let selectedOffer = null; // for reservation modal
+let activeTab = 'available';
+
+/* ── Parse URL params ───────────────────────────────────────── */
+function getParams() {
+  const p = new URLSearchParams(window.location.search);
+  prog = p.get('prog') || 'nsl';
+  eventName = p.get('event') ? decodeURIComponent(p.get('event')) : null;
+}
+
+/* ── Load data ──────────────────────────────────────────────── */
+async function loadData() {
+  getParams();
+  if (!eventName) {
+    showError('No event specified. Please scan the QR code provided by your coordinator.');
+    return;
+  }
+
+  try {
+    // Get event
+    const events = await supaGet('tp_events',
+      'name=eq.' + encodeURIComponent(eventName) + '&program=eq.' + prog);
+    if (!events || !events.length) {
+      showError('Event not found. Please check with your coordinator.');
+      return;
+    }
+    eventId = events[0].id;
+
+    // Load offers, want list, reservations in parallel
+    const [offersData, wantsData, resData] = await Promise.all([
+      supaGet('tp_offers', 'event_id=eq.' + eventId + '&status=eq.active&order=created_at'),
+      supaGet('tp_want_list', 'event_id=eq.' + eventId + '&order=created_at'),
+      supaGet('tp_reservations', 'event_id=eq.' + eventId + '&status=eq.pending&order=created_at')
+    ]);
+
+    offers = offersData || [];
+    wantList = wantsData || [];
+    reservations = resData || [];
+
+    // Auto-expire old reservations
+    const now = new Date();
+    reservations = reservations.filter(r => new Date(r.expires_at) > now);
+
+    renderPage();
+  } catch(e) {
+    showError('Unable to connect. Please try again.');
+    console.error(e);
+  }
+}
+
+/* ── Render ─────────────────────────────────────────────────── */
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+function condBadge(cond) {
+  const map = {
+    'new-surplus': '<span class="badge badge-surplus">New — surplus</span>',
+    'new': '<span class="badge badge-new">New</span>',
+    'used-good': '<span class="badge badge-good">Used — serviceable</span>',
+  };
+  return map[cond] || '';
+}
+
+function isReserved(offerId) {
+  return reservations.some(r => r.offer_id === offerId);
+}
+
+function reservedBy(offerId) {
+  return reservations.find(r => r.offer_id === offerId);
+}
+
+function timeLeft(expiresAt) {
+  const diff = new Date(expiresAt) - new Date();
+  if (diff <= 0) return 'Expired';
+  const mins = Math.floor(diff / 60000);
+  const secs = Math.floor((diff % 60000) / 1000);
+  return mins + 'm ' + secs + 's remaining';
+}
+
+function renderPage() {
+  const progLabel = prog === 'nsl' ? 'NSL Racing Challenge' : 'E-Car Racing';
+  const app = document.getElementById('app');
+
+  app.innerHTML = `
+    <div class="header">
+      <div style="font-size:28px;margin-bottom:4px;">🏁</div>
+      <h1>Trading Post</h1>
+      <p>${esc(progLabel)}</p>
+      <span class="event-tag">${esc(eventName)}</span>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-available" onclick="switchTab('available')">
+        Available (${offers.length})
+      </button>
+      <button class="tab-btn" id="tab-looking" onclick="switchTab('looking')">
+        Looking for (${wantList.length})
+      </button>
+      <button class="tab-btn" id="tab-request" onclick="switchTab('request')">
+        Request trade
+      </button>
+    </div>
+
+    <!-- Available to trade -->
+    <div class="tab-panel active" id="panel-available">
+      ${offers.length === 0
+        ? '<div class="section"><div class="empty">No items listed for trade at this event yet.<br/>Check back soon or ask your coordinator.</div></div>'
+        : offers.map(o => {
+            const reserved = isReserved(o.id);
+            const res = reservedBy(o.id);
+            return `
+              <div class="offer-card">
+                <div class="offer-name">${esc(o.name)} ${condBadge(o.condition)}</div>
+                <div class="offer-meta">
+                  ${o.bin_number ? `<span>Bin: <strong>${esc(o.bin_number)}</strong></span>` : ''}
+                  <span>Qty available: <strong>${o.qty}</strong></span>
+                  ${o.looking_for ? `<span>Wants: <strong>${esc(o.looking_for)}</strong></span>` : ''}
+                </div>
+                ${o.notes ? `<div style="font-size:12px;color:#888;margin-bottom:8px;">${esc(o.notes)}</div>` : ''}
+                ${reserved
+                  ? `<button class="reserve-btn reserved" disabled>
+                      ⏱ On hold — ${esc(res.competitor_name)} · ${timeLeft(res.expires_at)}
+                     </button>`
+                  : `<button class="reserve-btn" onclick="openResModal(${o.id}, '${esc(o.name)}', ${o.qty})">
+                      Reserve — 15 min hold
+                     </button>`
+                }
+              </div>`;
+          }).join('')
+      }
+    </div>
+
+    <!-- Looking for -->
+    <div class="tab-panel" id="panel-looking">
+      ${wantList.length === 0
+        ? '<div class="section"><div class="empty">No specific items listed yet.<br/>Submit a trade request and describe what you have.</div></div>'
+        : `<div class="section">
+            <h2><span class="icon" style="background:#EEF4FC;">🔍</span>Items we need</h2>
+            ${wantList.map(w => `
+              <div class="want-item">
+                <span class="want-dot"></span>
+                <span>${esc(w.name)}${w.bin_number ? ' <span style="font-size:11px;color:#aaa;">'+esc(w.bin_number)+'</span>' : ''}</span>
+                <span class="want-qty">Need: ${w.qty}</span>
+              </div>`).join('')}
+           </div>`
+      }
+    </div>
+
+    <!-- Request form -->
+    <div class="tab-panel" id="panel-request">
+      <div class="section">
+        <h2><span class="icon" style="background:#F1F8F4;">🤝</span>Request a trade</h2>
+        <div class="form-group">
+          <label>Your name <span class="required">*</span></label>
+          <input id="req-name" placeholder="First and last name" autocomplete="name"/>
+        </div>
+        <div class="form-group">
+          <label>Team / School <span class="required">*</span></label>
+          <input id="req-team" placeholder="Your team or school name"/>
+        </div>
+        <div class="form-group">
+          <label>Phone number <span style="color:#aaa;font-weight:400;">(optional)</span></label>
+          <input id="req-phone" placeholder="So we can find you in the pits" type="tel" autocomplete="tel"/>
+        </div>
+        <div style="height:1px;background:#f0f0ee;margin:12px 0;"></div>
+        <div class="form-group">
+          <label>What do you want from us? <span class="required">*</span></label>
+          <select id="req-want">
+            <option value="">— Select an item or describe below —</option>
+            ${offers.filter(o => !isReserved(o.id)).map(o =>
+              `<option value="${esc(o.name)}">${esc(o.name)} (${o.qty} available)</option>`
+            ).join('')}
+            <option value="__other__">Other / describe below</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>What are you offering in return? <span class="required">*</span></label>
+          <input id="req-offering" placeholder="Part name, condition, quantity"/>
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="req-notes" placeholder="Any other details about your offer or what you need…"></textarea>
+        </div>
+        <button class="submit-btn" onclick="submitRequest()" id="submit-btn">
+          Send trade request
+        </button>
+        <div id="req-error" style="display:none;margin-top:8px;font-size:12px;color:#dc3545;text-align:center;"></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Racing Program Trading Post · Refreshes every 30 seconds
+    </div>
+  `;
+
+  // Start timers for reserved items
+  startTimers();
+
+  // Auto-refresh every 30 seconds
+  setTimeout(silentRefresh, 30000);
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  ['available','looking','request'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('panel-' + t).classList.toggle('active', t === tab);
+  });
+}
+
+function startTimers() {
+  // Update timer displays every second
+  setInterval(() => {
+    document.querySelectorAll('.reserve-btn.reserved').forEach(btn => {
+      const res = reservations.find(r => btn.textContent.includes(r.competitor_name));
+      if (res) {
+        const left = timeLeft(res.expires_at);
+        if (left === 'Expired') {
+          // Remove from local list and re-render
+          reservations = reservations.filter(r2 => r2.id !== res.id);
+          renderPage();
+        } else {
+          btn.innerHTML = '⏱ On hold — ' + esc(res.competitor_name) + ' · ' + left;
+        }
+      }
+    });
+  }, 1000);
+}
+
+async function silentRefresh() {
+  try {
+    const [offersData, resData] = await Promise.all([
+      supaGet('tp_offers', 'event_id=eq.' + eventId + '&status=eq.active&order=created_at'),
+      supaGet('tp_reservations', 'event_id=eq.' + eventId + '&status=eq.pending&order=created_at')
+    ]);
+    if (offersData) offers = offersData;
+    if (resData) {
+      const now = new Date();
+      reservations = resData.filter(r => new Date(r.expires_at) > now);
+    }
+    renderPage();
+  } catch(e) {}
+}
+
+/* ── Reservation modal ──────────────────────────────────────── */
+function openResModal(offerId, offerName, qty) {
+  selectedOffer = { id: offerId, name: offerName, qty };
+  document.getElementById('res-modal-title').textContent = 'Reserve "' + offerName + '"?';
+  document.getElementById('res-modal-body').textContent =
+    'This puts a 15-minute hold on this item. Find the coordinator in the pits to complete the trade. You\'ll need to provide your name and team.';
+  document.getElementById('res-modal').classList.add('open');
+}
+
+function closeResModal() {
+  document.getElementById('res-modal').classList.remove('open');
+  selectedOffer = null;
+}
+
+async function submitReservation() {
+  if (!selectedOffer) return;
+  closeResModal();
+
+  // Get name/team from request form if filled, otherwise prompt
+  const name = (document.getElementById('req-name') || {}).value || '';
+  const team = (document.getElementById('req-team') || {}).value || '';
+
+  if (!name || !team) {
+    // Switch to request tab to fill in details
+    switchTab('request');
+    document.getElementById('req-want').value = selectedOffer.name;
+    document.getElementById('req-error').style.display = 'block';
+    document.getElementById('req-error').textContent =
+      'Please fill in your name and team to complete the reservation, then re-tap the Reserve button.';
+    return;
+  }
+
+  const now = new Date();
+  const expires = new Date(now.getTime() + 15 * 60 * 1000);
+
+  const res = await supaPost('tp_reservations', {
+    event_id: eventId,
+    program: prog,
+    competitor_name: name,
+    team_name: team,
+    wanted_item_name: selectedOffer.name,
+    wanted_qty: 1,
+    offer_id: selectedOffer.id,
+    status: 'pending',
+    reserved_at: now.toISOString(),
+    expires_at: expires.toISOString()
+  });
+
+  if (res) {
+    reservations.push(res[0]);
+    renderPage();
+    // Show success briefly
+    const card = document.querySelector('.reserve-btn.reserved');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+/* ── Request form submit ────────────────────────────────────── */
+async function submitRequest() {
+  const name = document.getElementById('req-name').value.trim();
+  const team = document.getElementById('req-team').value.trim();
+  const phone = document.getElementById('req-phone').value.trim();
+  const want = document.getElementById('req-want').value;
+  const offering = document.getElementById('req-offering').value.trim();
+  const notes = document.getElementById('req-notes').value.trim();
+  const errEl = document.getElementById('req-error');
+
+  errEl.style.display = 'none';
+
+  if (!name) { showFormError('Please enter your name'); return; }
+  if (!team) { showFormError('Please enter your team name'); return; }
+  if (!want) { showFormError('Please select what you want'); return; }
+  if (!offering) { showFormError('Please describe what you\'re offering in return'); return; }
+
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('submit-btn').textContent = 'Sending…';
+
+  const wantName = want === '__other__' ? notes : want;
+
+  // Find offer id if selected from list
+  const matchedOffer = offers.find(o => o.name === wantName);
+
+  const res = await supaPost('tp_reservations', {
+    event_id: eventId,
+    program: prog,
+    competitor_name: name,
+    team_name: team,
+    phone: phone,
+    wanted_item_name: wantName,
+    wanted_qty: 1,
+    offer_id: matchedOffer ? matchedOffer.id : null,
+    their_offer_name: offering,
+    their_offer_condition: 'unknown',
+    notes: notes,
+    status: 'pending',
+    reserved_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+  });
+
+  if (res) {
+    showSuccess(name, wantName);
+  } else {
+    document.getElementById('submit-btn').disabled = false;
+    document.getElementById('submit-btn').textContent = 'Send trade request';
+    showFormError('Something went wrong. Please try again.');
+  }
+}
+
+function showFormError(msg) {
+  const el = document.getElementById('req-error');
+  el.style.display = 'block';
+  el.textContent = msg;
+}
+
+function showSuccess(name, wantName) {
+  const app = document.getElementById('app');
+  const progLabel = prog === 'nsl' ? 'NSL Racing Challenge' : 'E-Car Racing';
+  app.innerHTML = `
+    <div class="header">
+      <div style="font-size:28px;margin-bottom:4px;">🏁</div>
+      <h1>Trading Post</h1>
+      <p>${esc(progLabel)}</p>
+      <span class="event-tag">${esc(eventName)}</span>
+    </div>
+    <div class="success-box">
+      <div class="icon">✅</div>
+      <h3>Request sent!</h3>
+      <p>Hi ${esc(name)} — your request for <strong>${esc(wantName)}</strong> has been sent to the coordinator.<br/><br/>
+      Find them in the pits — you have <strong>15 minutes</strong> before the hold expires.</p>
+    </div>
+    <div class="section" style="text-align:center;">
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Want to make another request?</p>
+      <button onclick="loadData()" style="padding:10px 24px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer;font-family:inherit;">Back to Trading Post</button>
+    </div>
+    <div class="footer">Racing Program Trading Post</div>
+  `;
+}
+
+function showError(msg) {
+  document.getElementById('app').innerHTML = `
+    <div style="text-align:center;padding:3rem 1rem;">
+      <div style="font-size:40px;margin-bottom:1rem;">⚠️</div>
+      <div style="font-size:14px;color:#666;">${esc(msg)}</div>
+    </div>`;
+}
+
+
+/* ── Keepalive ── */
+setInterval(async function() {
+  try { await supaGet('app_config', 'key=eq.suppliers&select=key'); } catch(e) {}
+}, 10 * 60 * 1000);
+
+/* ── Start ──────────────────────────────────────────────────── */
+loadData();
+</script>
+</body>
+</html>
